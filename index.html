@@ -695,10 +695,17 @@ function renderLb(){
   db.collection('leaderboard').orderBy('score','desc').limit(100).get()
   .then(function(snap){
     var data=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});
+    data=filterByCurrentWeek(data);
     if(lbScope==='local')data=data.filter(function(r){return !r.country||r.country===userCountry||r.country==='Local';});
     if(!data.some(function(r){return r.id===me.id;}))data.push(me);
     renderLbData(data.sort(function(a,b){return b.score-a.score;}));
   }).catch(function(){renderLbData([me]);});
+}
+function filterByCurrentWeek(data){
+  var week=getWeekKey();
+  return data.filter(function(r){
+    return r.week===week;
+  });
 }
 function renderLbData(all){
   var top3=all.slice(0,3),myPos=all.findIndex(function(e){return e.isMe;});
@@ -713,7 +720,7 @@ function renderLbData(all){
     html+='<div style="font-size:11px;color:#fbbf24;font-weight:600">'+r.score+'</div></div>';
   });
   document.getElementById('lb-medals').innerHTML=html;
-  var rest=all.slice(3),show=rest.slice(0,3);
+  var rest=all.slice(3),show=rest.slice(0,10);
   if(myPos>=3&&!show.some(function(r){return r.isMe;}))show.push(all[myPos]);
   var h2='';
   show.forEach(function(r){
