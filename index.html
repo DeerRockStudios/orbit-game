@@ -703,9 +703,17 @@ function renderLb(){
 }
 function filterByCurrentWeek(data){
   var week=getWeekKey();
-  return data.filter(function(r){
-    return r.week===week;
+
+  var current = data.filter(function(r){
+    return r.week === week;
   });
+
+  // Si no hay suficientes datos, muestra global histórico
+  if(current.length < 10){
+    return data; // fallback real global
+  }
+
+  return current;
 }
 function renderLbData(all){
   var top3=all.slice(0,3),myPos=all.findIndex(function(e){return e.isMe;});
