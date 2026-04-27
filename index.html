@@ -46,6 +46,11 @@ input{width:100%;padding:12px 16px;border-radius:12px;border-width:1px;border-st
 .div-line span{font-size:11px;letter-spacing:2px;opacity:.35}
 #scr-auth.on,#scr-shop.on,#scr-profile.on,#scr-dead.on,#scr-pause.on{background:var(--scr-bg,#f0ebe4)}
 @keyframes bk{0%,100%{opacity:.2}50%{opacity:.5}}
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
 .bk{animation:bk 2s ease-in-out infinite}
 </style>
 </head>
@@ -785,6 +790,9 @@ function rsz(){W=cv.width=innerWidth;H=cv.height=innerHeight;}
 window.addEventListener('resize',rsz);rsz();
 
 var phase='idle',score,combo,sesCoins,revived;
+var revivedThisRun=false;
+var reviveTimer=0;
+var reviveInterval=null;
 var circles,orb,parts,coins_arr;
 var camX=0,camY=0,tCamX=0,tCamY=0,zoom=.6,tZoom=.6;
 var charging=false,chargeStart=0;
@@ -835,7 +843,8 @@ function spawnMagnetBtn(){
   if(magnetBtn)return;
   magnetBtn=document.createElement('button');
   magnetBtn.style.cssText='position:absolute;bottom:28px;right:16px;width:48px;height:48px;border-radius:50%;background:rgba(251,191,36,.15);border:1.5px solid rgba(251,191,36,.5);color:#fbbf24;font-size:22px;cursor:pointer;display:none;align-items:center;justify-content:center;transition:all .2s;pointer-events:all;z-index:3';
-  magnetBtn.textContent='🧲';magnetBtn.onclick=activateMagnet;
+  magnetBtn.innerHTML='<div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center">🧲<svg id="magnet-ring" style="position:absolute;top:0;left:0;width:48px;height:48px;transform:rotate(-90deg)"><circle cx="24" cy="24" r="20" fill="none" stroke="rgba(251,191,36,0.3)" stroke-width="2"/><circle id="magnet-progress" cx="24" cy="24" r="20" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="125.6" stroke-dashoffset="0" stroke-linecap="round"/></svg></div>';
+  magnetBtn.onclick=activateMagnet;
   document.body.appendChild(magnetBtn);
 }
 function activateMagnet(){
@@ -852,17 +861,36 @@ function activateMagnet(){
     animateCoinDeduction(magnetCost);
   }else{S.ownedPowerups.magnet--;saveState();}
   magnetActive=true;
-  magnetTimer=10;
-  if(magnetBtn){magnetBtn.style.background='rgba(202,162,30,.35)';magnetBtn.style.border='1.5px solid rgba(202,162,30,.8)';magnetBtn.style.boxShadow='0 0 14px rgba(202,162,30,.4)';}
+  magnetTimer=20;
+  if(magnetBtn){
+    magnetBtn.style.background='rgba(202,162,30,.35)';
+    magnetBtn.style.border='1.5px solid rgba(202,162,30,.8)';
+    magnetBtn.style.boxShadow='0 0 14px rgba(202,162,30,.4)';
+    // Create circular progress indicator
+    magnetBtn.innerHTML='<div style="position:relative;width:100%;height:100%">🧲<svg id="magnet-ring" style="position:absolute;top:-2px;left:-2px;width:36px;height:36px;transform:rotate(-90deg)"><circle cx="18" cy="18" r="15" fill="none" stroke="rgba(251,191,36,0.3)" stroke-width="2"/><circle id="magnet-progress" cx="18" cy="18" r="15" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="94.2" stroke-dashoffset="0" stroke-linecap="round"/></svg></div>';
+  }
   // Spawn absorption particles
   for(var i=0;i<12;i++){var a=rnd(0,6.28),d=rnd(30,80);parts.push({wx:orb.wx+Math.cos(a)*d,wy:orb.wy+Math.sin(a)*d,vx:Math.cos(a)*-2,vy:Math.sin(a)*-2,life:1,col:'#caaa1e',r:rnd(2,4)});}
 }
 var magnetTimer=0;
+var magnetMaxTime=20;
 function updateMagnetTimer(dt){
   if(magnetActive&&magnetTimer>0){
     magnetTimer-=dt/60;
-    if(magnetBtn){magnetBtn.textContent='🧲'+Math.ceil(magnetTimer);}
-    if(magnetTimer<=0){magnetActive=false;magnetTimer=0;if(magnetBtn){magnetBtn.textContent='🧲';magnetBtn.style.background='rgba(251,191,36,.15)';magnetBtn.style.border='1.5px solid rgba(251,191,36,.5)';magnetBtn.style.boxShadow='none';}}
+    var progress=document.getElementById('magnet-progress');
+    if(progress){
+      var pct=1-(magnetTimer/magnetMaxTime);
+      progress.style.strokeDashoffset=125.6*(1-pct);
+    }
+    if(magnetTimer<=0){
+      magnetActive=false;magnetTimer=0;
+      if(magnetBtn){
+        magnetBtn.innerHTML='<div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center">🧲<svg id="magnet-ring" style="position:absolute;top:0;left:0;width:48px;height:48px;transform:rotate(-90deg)"><circle cx="24" cy="24" r="20" fill="none" stroke="rgba(251,191,36,0.3)" stroke-width="2"/><circle id="magnet-progress" cx="24" cy="24" r="20" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="125.6" stroke-dashoffset="0" stroke-linecap="round"/></svg></div>';
+        magnetBtn.style.background='rgba(251,191,36,.15)';
+        magnetBtn.style.border='1.5px solid rgba(251,191,36,.5)';
+        magnetBtn.style.boxShadow='none';
+      }
+    }
   }
 }
 function animateCoinDeduction(amount){
@@ -881,7 +909,8 @@ function showMagnetBtn(show){
 }
 
 function init(){
-  score=0;combo=0;sesCoins=0;revived=false;parts=[];coins_arr=[];
+  score=0;combo=0;sesCoins=0;revived=false;revivedThisRun=false;parts=[];coins_arr=[];
+  if(reviveInterval){clearInterval(reviveInterval);reviveInterval=null;}
   var pal=getPal();
   var c0={wx:0,wy:0,r:88,col:pal[0],spd:.025,ang:0,alpha:1,shockwave:null};
   circles=[c0];
@@ -911,9 +940,33 @@ function togglePause(){
   if(phase==='playing'){phase='paused';document.getElementById('scr-pause').classList.add('on');document.getElementById('scr-pause').style.background=T.bg;document.getElementById('pause-btn').style.display='none';}
   else if(phase==='paused'){phase='playing';document.getElementById('scr-pause').classList.remove('on');document.getElementById('pause-btn').style.display='flex';}
 }
+function startReviveCountdown(){
+  reviveTimer=3;
+  var reviveBtn=document.getElementById('d-revive');
+  if(!reviveBtn)return;
+  reviveBtn.textContent="REVIVE (3)";
+  reviveInterval=setInterval(function(){
+    reviveTimer--;
+    var btn=document.getElementById('d-revive');
+    if(!btn)return;
+    if(reviveTimer>0){
+      btn.textContent="REVIVE ("+reviveTimer+")";
+    }else{
+      clearInterval(reviveInterval);
+      var phrases=["CONTINUE YOUR RUN","YOU WERE CLOSE","ALMOST THERE!"];
+      if(combo>=5)phrases.push("SAVE YOUR COMBO");
+      btn.textContent=phrases[Math.floor(Math.random()*phrases.length)];
+      btn.style.background="rgba(239,68,68,0.8)";
+      btn.style.transform="scale(1.1)";
+      btn.style.boxShadow="0 0 20px rgba(239,68,68,0.8)";
+      btn.style.animation="pulse 0.6s infinite";
+    }
+  },1000);
+}
 function doRevive(){
-  if(revived)return;
+  if(revived||revivedThisRun)return;
   showRewardedAd(function(){
+    revivedThisRun=true;
     revived=true;document.getElementById('revive-wrap').style.display='none';
     var last=circles[circles.length-1];circles=[last];
     orb={wx:last.wx+last.r,wy:last.wy,vx:0,vy:0,on:0,last:-1,lastLaunched:-1,graceFrames:0,ang:0,trail:[],timer:10,timerMax:10};
@@ -938,7 +991,25 @@ function die(){
     document.getElementById('scr-dead').classList.add('on');document.getElementById('scr-dead').style.background=T.bg;
     document.getElementById('d-title').textContent=(score>=S.best&&score>0)?t('newRec'):t('crash');
     document.getElementById('d-score').textContent=score;document.getElementById('d-best').textContent=S.best;
-    document.getElementById('d-earned').textContent=sesCoins;lbMoreOpen=false;renderLb();applyTheme();
+    document.getElementById('d-earned').textContent=sesCoins;
+    
+    // Show revive only for good runs
+    var reviveWrap=document.getElementById('revive-wrap');
+    var reviveBtn=document.getElementById('d-revive');
+    if(reviveBtn){
+      reviveBtn.style.background='';
+      reviveBtn.style.transform='';
+      reviveBtn.style.boxShadow='';
+      reviveBtn.style.animation='';
+    }
+    if(revivedThisRun||(score<10&&combo<3)){
+      reviveWrap.style.display='none';
+    }else{
+      reviveWrap.style.display='block';
+      startReviveCountdown();
+    }
+    
+    lbMoreOpen=false;renderLb();applyTheme();
   }
   setTimeout(function(){
     if(!S.noAds&&deathCount%3===0)showInterstitial(function(){showDead();});
